@@ -1,0 +1,33 @@
+# OpenCode Configuration for Strix Consensus Server
+# Copy this file to ~/.config/opencode/opencode.json
+# Update the IP address to match your Strix Halo
+
+{
+  "$schema": "https://opencode.ai/config.json",
+  
+  "provider": {
+    "strix-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Strix Halo Local",
+      "options": {
+        "baseURL": "http://192.168.1.100:8080/v1"
+      },
+      "models": {
+        "local-consensus": {
+          "name": "Strix Consensus",
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        },
+        "local-model": {
+          "name": "Strix Single Model",
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        }
+      }
+    }
+  }
+}

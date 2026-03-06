@@ -1,0 +1,174 @@
+# Web Manager for Strix Consensus Server
+# Port 80 management interface
+
+from flask import Flask, render_template, jsonify, request, flash, redirect
+import os
+import json
+import requests
+import threading
+from datetime import datetime
+
+app = Flask(__name__)
+app.secret_key = os.urandom(24)
+
+ORCHESTRATOR_URL = os.getenv('ORCHESTRATOR_URL', 'http://localhost:8080')
+
+@app.route('/')
+def dashboard():
+    """Main dashboard"""
+    return render_template('dashboard.html')
+
+@app.route('/api/status')
+def api_status():
+    """Get system status from orchestrator"""
+    try:
+        response = requests.get(f"{ORCHESTRATOR_URL}/api/status", timeout=5)
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "mode": "unknown",
+            "workers": {},
+            "stats": {}
+        }), 503
+
+@app.route('/api/mode', methods=['POST'])
+def set_mode():
+    """Change operating mode"""
+    data = request.json
+    
+    try:
+        response = requests.post(
+            f"{ORCHESTRATOR_URL}/api/mode",
+            json=data,
+            timeout=5
+        )
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/logs')
+def get_logs():
+    """Get consensus logs"""
+    try:
+        limit = request.args.get('limit', 100, type=int)
+        response = requests.get(
+            f"{ORCHESTRATOR_URL}/api/logs?limit={limit}",
+            timeout=5
+        )
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({"logs": [], "error": str(e)})
+
+@app.route('/api/models')
+def list_models():
+    """List available models from HuggingFace"""
+    # This could query a local database or fetch from HF API
+    models = [
+        {
+            "id": "unsloth/Llama-3.1-8B-Instruct-GGUF",
+            "name": "Llama 3.1 8B Instruct",
+            "size": "4.5GB (Q4_K_M)",
+            "description": "Meta's Llama 3.1 8B instruction-tuned model"
+        },
+        {
+            "id": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+            "name": "Qwen 2.5 7B Instruct",
+            "size": "4.5GB (Q4_K_M)",
+            "description": "Alibaba's Qwen 2.5 7B instruction-tuned"
+        },
+        {
+            "id": "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct-GGUF",
+            "name": "DeepSeek Coder V2 Lite",
+            "size": "5GB (Q4_K_M)",
+            "description": "Specialized for coding tasks"
+        },
+        {
+            "id": "microsoft/Phi-3-mini-4k-instruct-GGUF",
+            "name": "Phi-3 Mini 4K",
+            "size": "2GB (Q4_K_M)",
+            "description": "Microsoft's small but capable model"
+        },
+        {
+            "id": "google/gemma-2-2b-it-GGUF",
+            "name": "Gemma 2 2B IT",
+            "size": "1.5GB (Q4_K_M)",
+            "description": "Google's efficient small model"
+        }
+    ]
+    return jsonify({"models": models})
+
+@app.route('/api/download', methods=['POST'])
+def download_model():
+    """Queue a model for download"""
+    data = request.json
+    model_id = data.get('model_id')
+    
+    # This would trigger a background download
+    # For now, just return success
+    return jsonify({
+        "status": "queued",
+        "model_id": model_id,
+        "message": f"Download queued for {model_id}"
+    })
+
+@app.route('/api/upload', methods=['POST'])
+def upload_model():
+    """Upload a GGUF file"""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+    
+    if not file.filename.endswith('.gguf'):
+        return jsonify({"error": "Only .gguf files allowed"}), 400
+    
+    # Save file
+    models_dir = os.getenv('MODELS_DIR', './models')
+    os.makedirs(models_dir, exist_ok=True)
+    
+    filepath = os.path.join(models_dir, file.filename)
+    file.save(filepath)
+    
+    return jsonify({
+        "status": "success",
+        "filename": file.filename,
+        "path": filepath
+    })
+
+@app.route('/api/workers', methods=['GET'])
+def get_workers():
+    """Get worker configuration"""
+    try:
+        response = requests.get(f"{ORCHESTRATOR_URL}/api/status", timeout=5)
+        data = response.json()
+        return jsonify(data.get('config', {}).get('workers', []))
+    except Exception as e:
+        return jsonify([])
+
+@app.route('/api/workers/<worker_id>/enable', methods=['POST'])
+def enable_worker(worker_id):
+    """Enable a worker"""
+    # This would update the orchestrator config
+    return jsonify({"status": "success", "action": "enable", "worker_id": worker_id})
+
+@app.route('/api/workers/<worker_id>/disable', methods=['POST'])
+def disable_worker(worker_id):
+    """Disable a worker"""
+    return jsonify({"status": "success", "action": "disable", "worker_id": worker_id})
+
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """Get current configuration"""
+    try:
+        response = requests.get(f"{ORCHESTRATOR_URL}/api/status", timeout=5)
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == '__main__':
+    port = int(os.getenv('WEB_MANAGER_PORT', 5000))
+    # Note: In production, use nginx to forward port 80 to this
+    app.run(host='0.0.0.0', port=port, debug=False)

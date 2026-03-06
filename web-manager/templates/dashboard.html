@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strix Consensus Server - Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Strix Consensus Server</h1>
+            <div class="status-indicator" id="status-indicator">
+                <span class="status-dot"></span>
+                <span id="connection-status">Connecting...</span>
+            </div>
+        </header>
+
+        <main>
+            <!-- Mode Selection Panel -->
+            <section class="panel mode-panel">
+                <h2>Operating Mode</h2>
+                <div class="mode-controls">
+                    <div class="mode-selector">
+                        <label class="mode-option">
+                            <input type="radio" name="mode" value="single" id="mode-single">
+                            <div class="mode-card">
+                                <h3>Single Model</h3>
+                                <p>Fast responses from one selected model</p>
+                                <div class="mode-details">
+                                    <label>Active Model:</label>
+                                    <select id="active-worker-select">
+                                        <option value="">Loading...</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </label>
+                        
+                        <label class="mode-option">
+                            <input type="radio" name="mode" value="consensus" id="mode-consensus">
+                            <div class="mode-card">
+                                <h3>Consensus Mode</h3>
+                                <p>Multiple models vote, judge selects best</p>
+                                <div class="mode-details">
+                                    <label>Workers to consult:</label>
+                                    <input type="range" id="worker-count" min="1" max="5" value="3">
+                                    <span id="worker-count-display">3</span>
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="use-judge" checked>
+                                        Use judge evaluation
+                                    </label>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <button id="apply-mode-btn" class="btn btn-primary">Apply Changes</button>
+                </div>
+            </section>
+
+            <div class="grid">
+                <!-- Worker Status Panel -->
+                <section class="panel worker-panel">
+                    <h2>Worker Models</h2>
+                    <div id="worker-list" class="worker-list">
+                        <p>Loading workers...</p>
+                    </div>
+                </section>
+
+                <!-- Performance Panel -->
+                <section class="panel stats-panel">
+                    <h2>Performance</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <label>Total Requests</label>
+                            <span id="stat-total">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <label>Consensus Mode</label>
+                            <span id="stat-consensus">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <label>Avg Latency</label>
+                            <span id="stat-latency">0s</span>
+                        </div>
+                    </div>
+                    
+                    <h3>Worker Usage</h3>
+                    <div id="worker-usage-chart"></div>
+                </section>
+            </div>
+
+            <!-- Recent Consensus Decisions -->
+            <section class="panel logs-panel">
+                <h2>Recent Consensus Decisions</h2>
+                <div class="logs-controls">
+                    <button id="refresh-logs-btn" class="btn btn-secondary">Refresh</button>
+                    <select id="logs-limit">
+                        <option value="10">Last 10</option>
+                        <option value="50" selected>Last 50</option>
+                        <option value="100">Last 100</option>
+                    </select>
+                </div>
+                <div id="consensus-logs" class="logs-container">
+                    <p>No logs yet...</p>
+                </div>
+            </section>
+
+            <!-- Model Management -->
+            <section class="panel models-panel">
+                <h2>Model Management</h2>
+                
+                <div class="models-tabs">
+                    <button class="tab-btn active" data-tab="download">Download from HuggingFace</button>
+                    <button class="tab-btn" data-tab="upload">Upload GGUF</button>
+                </div>
+                
+                <div id="download-tab" class="tab-content active">
+                    <div class="model-search">
+                        <input type="text" id="model-search" placeholder="Search models...">
+                        <button id="search-btn" class="btn btn-secondary">Search</button>
+                    </div>
+                    <div id="available-models" class="model-list">
+                        <p>Loading available models...</p>
+                    </div>
+                </div>
+                
+                <div id="upload-tab" class="tab-content">
+                    <div class="upload-area" id="upload-area">
+                        <p>Drag & drop GGUF files here</p>
+                        <p>or</p>
+                        <input type="file" id="file-input" accept=".gguf" multiple>
+                        <button class="btn btn-secondary" onclick="document.getElementById('file-input').click()">
+                            Select Files
+                        </button>
+                    </div>
+                    <div id="upload-progress"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
