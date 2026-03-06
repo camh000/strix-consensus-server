@@ -77,13 +77,33 @@ install_rocm() {
     fi
     
     # Add AMD GPU repository
-    wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key | sudo apt-key add -
-    # Get Ubuntu codename (jammy for 22.04, noble for 24.04)
-    UBUNTU_CODENAME=$(lsb_release -cs)
-    echo "deb [arch=amd64] https://repo.radeon.com/rocm/apt/latest ${UBUNTU_CODENAME} main" | sudo tee /etc/apt/sources.list.d/rocm.list
+    print_step "Adding ROCm repository..."
     
-    sudo apt update
-    sudo apt install -y rocm-dev hip-dev
+    # Get Ubuntu codename
+    UBUNTU_CODENAME=$(lsb_release -cs)
+    print_step "Detected Ubuntu codename: ${UBUNTU_CODENAME}"
+    
+    # Install keyring
+    sudo mkdir -p /etc/apt/keyrings
+    wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/rocm.gpg
+    
+    # Add repository with signed-by
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest ${UBUNTU_CODENAME} main" | sudo tee /etc/apt/sources.list.d/rocm.list
+    
+    # Update package lists
+    sudo apt update || {
+        print_error "Failed to update package lists. Trying alternative repository..."
+        # Fallback: use amdgpu-install method
+        sudo apt install -y amdgpu-install
+        sudo amdgpu-install --usecase=rocm
+        return
+    }
+    
+    sudo apt install -y rocm-dev hip-dev || {
+        print_warning "ROCm package install failed, attempting alternative method..."
+        sudo apt install -y amdgpu-install
+        sudo amdgpu-install --usecase=rocm --no-dkms
+    }
     
     # Add user to render and video groups
     sudo usermod -a -G render,video $USER
