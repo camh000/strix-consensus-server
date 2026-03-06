@@ -293,11 +293,16 @@ EOF
     sudo ln -sf /etc/nginx/sites-available/strix-consensus /etc/nginx/sites-enabled/
     sudo rm -f /etc/nginx/sites-enabled/default
     
-    # Reload systemd
-    systemctl --user daemon-reload
-    sudo systemctl daemon-reload
-    
-    echo "✓ Services installed"
+    # Check if systemd is available
+    if pidof systemd > /dev/null 2>&1; then
+        print_step "Reloading systemd..."
+        systemctl --user daemon-reload 2>/dev/null || true
+        sudo systemctl daemon-reload 2>/dev/null || true
+        echo "✓ Services installed (systemd mode)"
+    else
+        print_warning "Systemd not available, services will be managed manually"
+        echo "✓ Services installed (manual mode)"
+    fi
 }
 
 # Main installation
@@ -336,10 +341,18 @@ main() {
     echo "2. Run: ./scripts/start-all.sh"
     echo "3. Access web interface at http://localhost"
     echo ""
-    echo "To start services on boot:"
-    echo "  systemctl --user enable strix-orchestrator"
-    echo "  systemctl --user enable strix-web-manager"
-    echo ""
+    
+    # Check if systemd is available for final message
+    if pidof systemd > /dev/null 2>&1; then
+        echo "To start services on boot:"
+        echo "  systemctl --user enable strix-orchestrator"
+        echo "  systemctl --user enable strix-web-manager"
+        echo ""
+    else
+        echo "Note: Systemd not detected. Services will run in foreground."
+        echo "To run in background, use: nohup ./scripts/start-all.sh &"
+        echo ""
+    fi
 }
 
 # Run installation

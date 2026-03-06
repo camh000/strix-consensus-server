@@ -10,7 +10,15 @@ echo ""
 
 # Start nginx (requires sudo)
 echo "Starting nginx (port 80)..."
-sudo systemctl start nginx
+if command -v systemctl &> /dev/null && pidof systemd > /dev/null 2>&1; then
+    sudo systemctl start nginx
+elif command -v service &> /dev/null; then
+    sudo service nginx start
+elif command -v nginx &> /dev/null; then
+    sudo nginx
+else
+    echo "WARNING: Could not start nginx automatically. Please start it manually."
+fi
 
 # Start orchestrator
 echo "Starting orchestrator..."
