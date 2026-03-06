@@ -76,39 +76,35 @@ install_rocm() {
         return
     fi
     
-    # Add AMD GPU repository
-    print_step "Adding ROCm repository..."
+    # Check for conflicting packages
+    if dpkg -l | grep -E "rocm|hip" | grep -q "^ii"; then
+        print_warning "Found existing ROCm packages with different versions"
+        print_step "Removing conflicting packages..."
+        sudo apt remove -y rocm-* hip-* || true
+        sudo apt autoremove -y
+        sudo apt update
+    fi
     
-    # Get Ubuntu codename
-    UBUNTU_CODENAME=$(lsb_release -cs)
-    print_step "Detected Ubuntu codename: ${UBUNTU_CODENAME}"
+    # Try installing ROCm with aptitude for better dependency resolution
+    print_step "Installing ROCm (this may take a while)..."
     
-    # Install keyring
-    sudo mkdir -p /etc/apt/keyrings
-    wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/rocm.gpg
+    # Install aptitude if not present
+    sudo apt install -y aptitude
     
-    # Add repository with signed-by
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest ${UBUNTU_CODENAME} main" | sudo tee /etc/apt/sources.list.d/rocm.list
-    
-    # Update package lists
-    sudo apt update || {
-        print_error "Failed to update package lists. Trying alternative repository..."
-        # Fallback: use amdgpu-install method
-        sudo apt install -y amdgpu-install
-        sudo amdgpu-install --usecase=rocm
-        return
-    }
-    
-    sudo apt install -y rocm-dev hip-dev || {
-        print_warning "ROCm package install failed, attempting alternative method..."
-        sudo apt install -y amdgpu-install
-        sudo amdgpu-install --usecase=rocm --no-dkms
+    # Try to install with aptitude which handles dependencies better
+    sudo aptitude install -y rocm-dev hip-dev || {
+        print_warning "ROCm installation with aptitude failed"
+        print_step "Trying alternative: Installing ROCm components individually..."
+        
+        # Install components individually
+        sudo apt install -y rocm-core rocm-language-runtime rocm-llvm || true
+        sudo apt install -y hip-dev || true
     }
     
     # Add user to render and video groups
-    sudo usermod -a -G render,video $USER
+    sudo usermod -a -G render,video $USER 2>/dev/null || true
     
-    echo "✓ ROCm installed"
+    echo "✓ ROCm installation attempted"
     print_warning "You may need to log out and back in for group changes to take effect"
 }
 
@@ -126,15 +122,28 @@ build_llama_cpp() {
         cd llama.cpp
     fi
     
-    # Build with HIP
-    cmake -B build \
-        -DGGML_HIP=ON \
-        -DGGML_HIPBLAS=ON \
-        -DCMAKE_C_COMPILER=clang \
-        -DCMAKE_CXX_COMPILER=clang++ \
-        -DLLAMA_CUDA=ON
+    # Check if HIP is available
+    if command -v hipcc &> /dev/null; then
+        print_step "Building llama.cpp with HIP/AMD GPU support..."
+        cmake -B build \
+            -DGGML_HIP=ON \
+            -DGGML_HIPBLAS=ON \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DLLAMA_CUDA=ON 2>&1 || {
+            print_warning "HIP build failed, falling back to CPU-only build..."
+            rm -rf build
+            cmake -B build -DCMAKE_BUILD_TYPE=Release
+        }
+    else
+        print_step "HIP not found, building llama.cpp with CPU support only..."
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+    fi
     
-    cmake --build build --config Release -j$(nproc)
+    cmake --build build --config Release -j$(nproc) || {
+        print_error "Build failed. Trying with single thread..."
+        cmake --build build --config Release
+    }
     
     # Add to PATH
     echo 'export PATH="$HOME/llama.cpp/build/bin:$PATH"' >> ~/.bashrc
