@@ -78,7 +78,9 @@ install_rocm() {
     
     # Add AMD GPU repository
     wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key | sudo apt-key add -
-    echo 'deb [arch=amd64] https://repo.radeon.com/rocm/apt/latest ubuntu main' | sudo tee /etc/apt/sources.list.d/rocm.list
+    # Get Ubuntu codename (jammy for 22.04, noble for 24.04)
+    UBUNTU_CODENAME=$(lsb_release -cs)
+    echo "deb [arch=amd64] https://repo.radeon.com/rocm/apt/latest ${UBUNTU_CODENAME} main" | sudo tee /etc/apt/sources.list.d/rocm.list
     
     sudo apt update
     sudo apt install -y rocm-dev hip-dev
