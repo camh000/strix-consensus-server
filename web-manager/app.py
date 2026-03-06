@@ -265,6 +265,7 @@ def shutdown():
 @app.route('/api/downloads')
 def get_downloads():
     """Get active and completed downloads"""
+    print(f"[API] /api/downloads called. Active: {len(downloads_store['active'])}, Completed: {len(downloads_store['completed'])}")
     return jsonify(downloads_store)
 
 @app.route('/api/downloads/clear', methods=['POST'])
