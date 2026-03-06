@@ -642,11 +642,13 @@ async function loadDownloads() {
 function renderDownloads(data) {
     const activeContainer = document.getElementById('active-downloads');
     const completedContainer = document.getElementById('completed-downloads');
+    const failedContainer = document.getElementById('failed-downloads');
     
     if (!activeContainer || !completedContainer) return;
     
     const active = data.active || [];
     const completed = data.completed || [];
+    const failed = data.failed || [];
     
     // Render active downloads
     if (active.length === 0) {
@@ -691,6 +693,30 @@ function renderDownloads(data) {
                 </div>
             </div>
         `).join('');
+    }
+    
+    // Render failed downloads
+    if (failedContainer) {
+        if (failed.length === 0) {
+            failedContainer.innerHTML = '<p class="no-downloads">No failed downloads</p>';
+        } else {
+            failedContainer.innerHTML = failed.map(download => `
+                <div class="download-item failed" data-download-id="${download.id}">
+                    <div class="download-info">
+                        <h4>${download.name}</h4>
+                        <div class="download-status">
+                            <span class="status-badge failed">Failed</span>
+                        </div>
+                    </div>
+                    <div class="download-details">
+                        <span>Failed: ${new Date(download.failed_at).toLocaleString()}</span>
+                    </div>
+                    <div class="download-error" style="color: var(--danger-color); font-size: 0.85rem; margin-top: 8px; padding: 8px; background: rgba(239, 68, 68, 0.1); border-radius: 4px;">
+                        ${download.error || 'Unknown error'}
+                    </div>
+                </div>
+            `).join('');
+        }
     }
     
     // Update available models dropdown if new models were downloaded

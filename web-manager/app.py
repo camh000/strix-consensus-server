@@ -7,6 +7,8 @@ import json
 import requests
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 
 app = Flask(__name__)
@@ -233,7 +235,8 @@ def reload_models():
 # In-memory download tracking (would be better with a database or Redis)
 downloads_store = {
     'active': [],
-    'completed': []
+    'completed': [],
+    'failed': []
 }
 
 @app.route('/api/shutdown', methods=['POST'])
@@ -307,7 +310,6 @@ def download_model():
         print(f"[DOWNLOAD WORKER] Starting download for {model_id}")
         try:
             # Call the actual download logic
-            import urllib.request
             import os
             
             models_dir = os.getenv('MODELS_DIR', './models')
@@ -340,10 +342,38 @@ def download_model():
                         break
             
             # Attempt download from HuggingFace
-            url = f"https://huggingface.co/{model_id}/resolve/main/{filename}"
-            print(f"[DOWNLOAD WORKER] Downloading from: {url}")
-            urllib.request.urlretrieve(url, filepath, download_progress_hook)
-            print(f"[DOWNLOAD WORKER] Download completed successfully")
+            # Try different URL patterns since GGUF filenames vary
+            urls_to_try = [
+                f"https://huggingface.co/{model_id}/resolve/main/{filename}",
+                f"https://huggingface.co/{model_id}/resolve/main/model.gguf",
+                # Try common quantization variants
+                f"https://huggingface.co/{model_id}/resolve/main/{parts[-1]}-Q4_K_M.gguf" if len(parts) >= 2 else "",
+                f"https://huggingface.co/{model_id}/resolve/main/{parts[-1]}-Q5_K_M.gguf" if len(parts) >= 2 else "",
+            ]
+            
+            # Remove empty strings
+            urls_to_try = [u for u in urls_to_try if u]
+            
+            download_success = False
+            last_error = None
+            
+            for url in urls_to_try:
+                print(f"[DOWNLOAD WORKER] Trying: {url}")
+                try:
+                    urllib.request.urlretrieve(url, filepath, download_progress_hook)
+                    print(f"[DOWNLOAD WORKER] Download completed successfully from: {url}")
+                    download_success = True
+                    break
+                except urllib.error.HTTPError as e:
+                    print(f"[DOWNLOAD WORKER] Failed with {e.code}: {e.reason}")
+                    last_error = e
+                    if e.code == 404:
+                        continue  # Try next URL
+                    else:
+                        raise  # Re-raise other errors
+            
+            if not download_success:
+                raise Exception(f"Could not download model. Tried {len(urls_to_try)} URLs. Last error: {last_error}")
             
             # Mark as completed
             download_entry['progress'] = 100.0
@@ -361,7 +391,11 @@ def download_model():
             traceback.print_exc()
             download_entry['status'] = 'failed'
             download_entry['error'] = str(e)
+            download_entry['failed_at'] = datetime.now().isoformat()
+            # Remove from active and add to failed
             downloads_store['active'] = [d for d in downloads_store['active'] if d['id'] != download_id]
+            downloads_store['failed'].insert(0, download_entry)
+            print(f"[DOWNLOAD WORKER] Moved to failed. Total failed: {len(downloads_store['failed'])}")
     
     threading.Thread(target=download_worker, daemon=True).start()
     
