@@ -303,12 +303,14 @@ def download_model():
     
     # Start download in background thread
     def download_worker():
+        print(f"[DOWNLOAD WORKER] Starting download for {model_id}")
         try:
             # Call the actual download logic
             import urllib.request
             import os
             
             models_dir = os.getenv('MODELS_DIR', './models')
+            print(f"[DOWNLOAD WORKER] Models dir: {models_dir}")
             os.makedirs(models_dir, exist_ok=True)
             
             # Get filename from model_id
@@ -319,6 +321,7 @@ def download_model():
                 filename = f"{model_id}.gguf"
             
             filepath = os.path.join(models_dir, filename)
+            print(f"[DOWNLOAD WORKER] Will save to: {filepath}")
             
             # Download with progress tracking
             def download_progress_hook(block_num, block_size, total_size):
@@ -337,7 +340,9 @@ def download_model():
             
             # Attempt download from HuggingFace
             url = f"https://huggingface.co/{model_id}/resolve/main/{filename}"
+            print(f"[DOWNLOAD WORKER] Downloading from: {url}")
             urllib.request.urlretrieve(url, filepath, download_progress_hook)
+            print(f"[DOWNLOAD WORKER] Download completed successfully")
             
             # Mark as completed
             download_entry['progress'] = 100.0
@@ -347,8 +352,12 @@ def download_model():
             # Move to completed
             downloads_store['active'] = [d for d in downloads_store['active'] if d['id'] != download_id]
             downloads_store['completed'].insert(0, download_entry)
+            print(f"[DOWNLOAD WORKER] Moved to completed. Total completed: {len(downloads_store['completed'])}")
             
         except Exception as e:
+            print(f"[DOWNLOAD WORKER] ERROR: {str(e)}")
+            import traceback
+            traceback.print_exc()
             download_entry['status'] = 'failed'
             download_entry['error'] = str(e)
             downloads_store['active'] = [d for d in downloads_store['active'] if d['id'] != download_id]
