@@ -99,20 +99,6 @@ def list_models():
     ]
     return jsonify({"models": models})
 
-@app.route('/api/download', methods=['POST'])
-def download_model():
-    """Queue a model for download"""
-    data = request.json
-    model_id = data.get('model_id')
-    
-    # This would trigger a background download
-    # For now, just return success
-    return jsonify({
-        "status": "queued",
-        "model_id": model_id,
-        "message": f"Download queued for {model_id}"
-    })
-
 @app.route('/api/upload', methods=['POST'])
 def upload_model():
     """Upload a GGUF file"""
@@ -274,11 +260,8 @@ def clear_downloads():
     downloads_store['completed'] = []
     return jsonify({"status": "success"})
 
-# Override download endpoint to track downloads
-original_download = download_model
-
 @app.route('/api/download', methods=['POST'])
-def download_model_tracked():
+def download_model():
     """Download a model with tracking"""
     data = request.json
     model_id = data.get('model_id')
