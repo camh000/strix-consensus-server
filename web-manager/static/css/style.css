@@ -461,3 +461,97 @@ header h1 {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-secondary);
 }
+
+/* Model Configuration Panel */
+.model-config-panel .panel-description {
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+}
+
+.model-config-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.model-config-item {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    gap: 16px;
+}
+
+.model-config-item.judge {
+    border-left: 4px solid var(--warning-color);
+}
+
+.model-config-item.worker {
+    border-left: 4px solid var(--primary-color);
+}
+
+.model-config-item .role-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    min-width: 70px;
+    text-align: center;
+}
+
+.model-config-item.judge .role-badge {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning-color);
+}
+
+.model-config-item.worker .role-badge {
+    background: rgba(99, 102, 241, 0.2);
+    color: var(--primary-color);
+}
+
+.model-config-item .config-info {
+    flex: 1;
+}
+
+.model-config-item .config-info h4 {
+    margin-bottom: 4px;
+    font-size: 1rem;
+}
+
+.model-config-item .config-info p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.model-config-item .model-select {
+    min-width: 300px;
+    padding: 10px 14px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.model-config-item .model-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.config-actions {
+    display: flex;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.config-actions button {
+    flex: 1;
+    max-width: 250px;
+}

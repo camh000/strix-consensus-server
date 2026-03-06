@@ -15,6 +15,7 @@ function initDashboard() {
     loadWorkers();
     loadLogs();
     loadAvailableModels();
+    loadModelConfiguration();
 }
 
 function setupEventListeners() {
@@ -52,6 +53,10 @@ function setupEventListeners() {
     
     // File upload
     setupFileUpload();
+    
+    // Model configuration
+    document.getElementById('save-model-config-btn')?.addEventListener('click', saveModelConfiguration);
+    document.getElementById('reload-models-btn')?.addEventListener('click', reloadModels);
 }
 
 function startAutoRefresh() {
@@ -104,8 +109,174 @@ async function loadAvailableModels() {
         const response = await fetch('/api/models');
         const data = await response.json();
         renderAvailableModels(data.models);
+        window.availableModels = data.models; // Store for model config
     } catch (error) {
         console.error('Failed to load models:', error);
+    }
+}
+
+// Model Configuration Functions
+async function loadModelConfiguration() {
+    try {
+        const response = await fetch('/api/config');
+        const data = await response.json();
+        renderModelConfiguration(data.config);
+    } catch (error) {
+        console.error('Failed to load model configuration:', error);
+    }
+}
+
+function renderModelConfiguration(config) {
+    const container = document.getElementById('worker-model-config');
+    if (!container) return;
+    
+    if (!config || !config.workers) {
+        container.innerHTML = '<p>No configuration available</p>';
+        return;
+    }
+    
+    const models = window.availableModels || [];
+    const modelOptions = models.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+    
+    let html = '';
+    
+    // Render workers
+    config.workers.forEach(worker => {
+        html += `
+            <div class="model-config-item worker" data-worker-id="${worker.id}">
+                <span class="role-badge">Worker</span>
+                <div class="config-info">
+                    <h4>${worker.id}</h4>
+                    <p>Port: ${worker.port}</p>
+                </div>
+                <select class="model-select" data-worker-id="${worker.id}">
+                    <option value="">Select a model...</option>
+                    ${modelOptions}
+                    <option value="custom" ${!models.find(m => m.id === worker.model) ? 'selected' : ''}>${worker.model}</option>
+                </select>
+            </div>
+        `;
+    });
+    
+    // Render judge
+    if (config.judge) {
+        html += `
+            <div class="model-config-item judge" data-worker-id="judge">
+                <span class="role-badge">Judge</span>
+                <div class="config-info">
+                    <h4>Judge Model</h4>
+                    <p>Port: ${config.judge.port}</p>
+                </div>
+                <select class="model-select" data-worker-id="judge">
+                    <option value="">Select a model...</option>
+                    ${modelOptions}
+                    <option value="custom" ${!models.find(m => m.id === config.judge.model) ? 'selected' : ''}>${config.judge.model}</option>
+                </select>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+    
+    // Set current values
+    config.workers.forEach(worker => {
+        const select = container.querySelector(`select[data-worker-id="${worker.id}"]`);
+        if (select) {
+            // Check if the model is in the available models list
+            const optionExists = Array.from(select.options).some(opt => opt.value === worker.model);
+            if (optionExists) {
+                select.value = worker.model;
+            }
+        }
+    });
+    
+    if (config.judge) {
+        const judgeSelect = container.querySelector('select[data-worker-id="judge"]');
+        if (judgeSelect) {
+            const optionExists = Array.from(judgeSelect.options).some(opt => opt.value === config.judge.model);
+            if (optionExists) {
+                judgeSelect.value = config.judge.model;
+            }
+        }
+    }
+}
+
+async function saveModelConfiguration() {
+    const container = document.getElementById('worker-model-config');
+    if (!container) return;
+    
+    const config = {
+        workers: [],
+        judge: null
+    };
+    
+    // Collect worker configurations
+    container.querySelectorAll('.model-config-item.worker').forEach(item => {
+        const workerId = item.dataset.workerId;
+        const select = item.querySelector('.model-select');
+        const modelId = select.value;
+        
+        if (modelId && modelId !== 'custom') {
+            config.workers.push({
+                id: workerId,
+                model: modelId
+            });
+        }
+    });
+    
+    // Collect judge configuration
+    const judgeItem = container.querySelector('.model-config-item.judge');
+    if (judgeItem) {
+        const select = judgeItem.querySelector('.model-select');
+        const modelId = select.value;
+        
+        if (modelId && modelId !== 'custom') {
+            config.judge = {
+                model: modelId
+            };
+        }
+    }
+    
+    try {
+        const response = await fetch('/api/config/models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('Model configuration saved successfully', 'success');
+            showNotification('Models will be reloaded automatically', 'info');
+        } else {
+            showNotification('Failed to save configuration: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showNotification('Error saving configuration: ' + error.message, 'error');
+    }
+}
+
+async function reloadModels() {
+    try {
+        const response = await fetch('/api/models/reload', {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('Models reloading... This may take a few minutes', 'success');
+            // Refresh status after a delay
+            setTimeout(() => {
+                loadStatus();
+                loadModelConfiguration();
+            }, 5000);
+        } else {
+            showNotification('Failed to reload models: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showNotification('Error reloading models: ' + error.message, 'error');
     }
 }
 

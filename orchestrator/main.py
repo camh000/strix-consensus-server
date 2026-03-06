@@ -317,6 +317,69 @@ async def get_logs(limit: int = 100):
     
     return {"logs": logs[-limit:]}
 
+class ModelConfig(BaseModel):
+    """Model configuration for workers and judge"""
+    workers: Optional[List[Dict]] = None
+    judge: Optional[Dict] = None
+
+@app.post("/api/config/models")
+async def update_model_config(config: ModelConfig):
+    """Update worker and judge model configuration"""
+    try:
+        # Update worker models
+        if config.workers:
+            for worker_update in config.workers:
+                worker_id = worker_update.get('id')
+                model = worker_update.get('model')
+                if worker_id and model:
+                    # Update in config manager
+                    for worker in config_manager.config.get('workers', []):
+                        if worker['id'] == worker_id:
+                            worker['model'] = model
+                            logger.info(f"Updated {worker_id} to use model: {model}")
+                            break
+        
+        # Update judge model
+        if config.judge and config.judge.get('model'):
+            if config_manager.config.get('judge'):
+                old_model = config_manager.config['judge']['model']
+                config_manager.config['judge']['model'] = config.judge['model']
+                logger.info(f"Updated judge model from {old_model} to: {config.judge['model']}")
+        
+        # Save configuration
+        config_manager._save_config()
+        
+        return {
+            "status": "success",
+            "message": "Model configuration updated. Models will be reloaded on next restart or when you click 'Reload Models'.",
+            "config": config_manager.get_config()
+        }
+    except Exception as e:
+        logger.error(f"Failed to update model configuration: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/models/reload")
+async def reload_models():
+    """Reload all models with new configuration"""
+    try:
+        logger.info("Reloading models with new configuration...")
+        
+        # Stop all current models
+        await model_pool.stop_all()
+        
+        # Re-initialize model pool with new config
+        await model_pool.initialize()
+        
+        logger.info("Models reloaded successfully")
+        return {
+            "status": "success",
+            "message": "Models reloaded successfully",
+            "workers": model_pool.get_worker_status()
+        }
+    except Exception as e:
+        logger.error(f"Failed to reload models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv('ORCHESTRATOR_PORT', 8080))

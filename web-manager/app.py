@@ -168,6 +168,68 @@ def get_config():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/config/models', methods=['POST'])
+def update_model_config():
+    """Update worker and judge model configuration"""
+    data = request.json
+    
+    try:
+        # Forward to orchestrator
+        response = requests.post(
+            f"{ORCHESTRATOR_URL}/api/config/models",
+            json=data,
+            timeout=10
+        )
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        # If orchestrator doesn't support this yet, save locally
+        try:
+            config_file = '../config/runtime_config.json'
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            
+            # Update worker models
+            if 'workers' in data:
+                for worker_update in data['workers']:
+                    for worker in config.get('workers', []):
+                        if worker['id'] == worker_update['id']:
+                            worker['model'] = worker_update['model']
+                            break
+            
+            # Update judge model
+            if 'judge' in data and config.get('judge'):
+                config['judge']['model'] = data['judge']['model']
+            
+            # Save config
+            with open(config_file, 'w') as f:
+                json.dump(config, f, indent=2)
+            
+            return jsonify({
+                "status": "success",
+                "message": "Configuration saved. Please restart services to apply changes."
+            })
+        except Exception as config_error:
+            return jsonify({
+                "error": f"Failed to update configuration: {str(config_error)}"
+            }), 500
+
+@app.route('/api/models/reload', methods=['POST'])
+def reload_models():
+    """Reload all models with new configuration"""
+    try:
+        # Forward to orchestrator
+        response = requests.post(
+            f"{ORCHESTRATOR_URL}/api/models/reload",
+            timeout=5
+        )
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        # If orchestrator doesn't support this, return manual instructions
+        return jsonify({
+            "status": "info",
+            "message": "To reload models, please run: ./scripts/restart-orchestrator.sh"
+        })
+
 if __name__ == '__main__':
     port = int(os.getenv('WEB_MANAGER_PORT', 5000))
     # Note: In production, use nginx to forward port 80 to this
