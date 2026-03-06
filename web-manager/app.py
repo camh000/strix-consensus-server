@@ -12,7 +12,20 @@ from datetime import datetime
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-ORCHESTRATOR_URL = os.getenv('ORCHESTRATOR_URL', 'http://localhost:8080')
+# Get orchestrator URL from environment, try to auto-detect if not set
+ORCHESTRATOR_URL = os.getenv('ORCHESTRATOR_URL')
+if not ORCHESTRATOR_URL:
+    # Try to detect the IP address
+    import socket
+    try:
+        # Get the IP address used to connect to the internet
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        ORCHESTRATOR_URL = f"http://{ip}:8080"
+    except:
+        ORCHESTRATOR_URL = "http://localhost:8080"
 
 @app.route('/')
 def dashboard():
