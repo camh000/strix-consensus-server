@@ -11,6 +11,9 @@ import os
 import logging
 from datetime import datetime
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from consensus_engine import ConsensusEngine
 from judge import Judge
 from tool_executor import ToolExecutor
