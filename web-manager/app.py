@@ -6,6 +6,7 @@ import os
 import json
 import requests
 import threading
+import time
 from datetime import datetime
 
 app = Flask(__name__)
@@ -229,6 +230,138 @@ def reload_models():
             "status": "info",
             "message": "To reload models, please run: ./scripts/restart-orchestrator.sh"
         })
+
+# In-memory download tracking (would be better with a database or Redis)
+downloads_store = {
+    'active': [],
+    'completed': []
+}
+
+@app.route('/api/shutdown', methods=['POST'])
+def shutdown():
+    """Shutdown all services"""
+    try:
+        import subprocess
+        import time
+        
+        # Stop nginx
+        subprocess.run(['sudo', 'pkill', 'nginx'], capture_output=True)
+        
+        # Kill orchestrator
+        subprocess.run(['pkill', '-f', 'orchestrator.main'], capture_output=True)
+        
+        # Kill web-manager (this process)
+        threading.Thread(target=lambda: (
+            time.sleep(1),
+            os._exit(0)
+        )).start()
+        
+        return jsonify({
+            "status": "success",
+            "message": "All services are shutting down..."
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/downloads')
+def get_downloads():
+    """Get active and completed downloads"""
+    return jsonify(downloads_store)
+
+@app.route('/api/downloads/clear', methods=['POST'])
+def clear_downloads():
+    """Clear completed downloads"""
+    downloads_store['completed'] = []
+    return jsonify({"status": "success"})
+
+# Override download endpoint to track downloads
+original_download = download_model
+
+@app.route('/api/download', methods=['POST'])
+def download_model_tracked():
+    """Download a model with tracking"""
+    data = request.json
+    model_id = data.get('model_id')
+    
+    if not model_id:
+        return jsonify({"error": "No model_id provided"}), 400
+    
+    # Create download entry
+    download_id = str(int(time.time()))
+    download_entry = {
+        'id': download_id,
+        'model_id': model_id,
+        'name': model_id.split('/')[-1] if '/' in model_id else model_id,
+        'progress': 0.0,
+        'downloaded': 0,
+        'total': 0,
+        'speed': '',
+        'eta': 'Calculating...',
+        'status': 'downloading',
+        'started_at': datetime.now().isoformat()
+    }
+    
+    downloads_store['active'].append(download_entry)
+    
+    # Start download in background thread
+    def download_worker():
+        try:
+            # Call the actual download logic
+            import urllib.request
+            import os
+            
+            models_dir = os.getenv('MODELS_DIR', './models')
+            os.makedirs(models_dir, exist_ok=True)
+            
+            # Get filename from model_id
+            parts = model_id.split('/')
+            if len(parts) >= 2:
+                filename = f"{parts[-1]}.gguf"
+            else:
+                filename = f"{model_id}.gguf"
+            
+            filepath = os.path.join(models_dir, filename)
+            
+            # Download with progress tracking
+            def download_progress_hook(block_num, block_size, total_size):
+                downloaded = block_num * block_size
+                progress = (downloaded / total_size) * 100 if total_size > 0 else 0
+                
+                download_entry['downloaded'] = downloaded
+                download_entry['total'] = total_size
+                download_entry['progress'] = progress
+                
+                # Update in store
+                for i, d in enumerate(downloads_store['active']):
+                    if d['id'] == download_id:
+                        downloads_store['active'][i] = download_entry
+                        break
+            
+            # Attempt download from HuggingFace
+            url = f"https://huggingface.co/{model_id}/resolve/main/{filename}"
+            urllib.request.urlretrieve(url, filepath, download_progress_hook)
+            
+            # Mark as completed
+            download_entry['progress'] = 100.0
+            download_entry['completed_at'] = datetime.now().isoformat()
+            download_entry['status'] = 'completed'
+            
+            # Move to completed
+            downloads_store['active'] = [d for d in downloads_store['active'] if d['id'] != download_id]
+            downloads_store['completed'].insert(0, download_entry)
+            
+        except Exception as e:
+            download_entry['status'] = 'failed'
+            download_entry['error'] = str(e)
+            downloads_store['active'] = [d for d in downloads_store['active'] if d['id'] != download_id]
+    
+    threading.Thread(target=download_worker, daemon=True).start()
+    
+    return jsonify({
+        "status": "queued",
+        "download_id": download_id,
+        "message": f"Download started for {model_id}"
+    })
 
 if __name__ == '__main__':
     port = int(os.getenv('WEB_MANAGER_PORT', 5000))

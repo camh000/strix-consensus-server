@@ -7,12 +7,30 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+    <!-- Shutdown Confirmation Dialog -->
+    <div id="shutdown-dialog" class="modal">
+        <div class="modal-content">
+            <h2>⚠️ Shutdown Confirmation</h2>
+            <p>Are you sure you want to shut down all services?</p>
+            <p class="modal-warning">This will stop the orchestrator, all model workers, web interface, and nginx.</p>
+            <div class="modal-actions">
+                <button id="confirm-shutdown-btn" class="btn btn-danger">Yes, Shutdown</button>
+                <button id="cancel-shutdown-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <h1>🚀 Strix Consensus Server</h1>
-            <div class="status-indicator" id="status-indicator">
-                <span class="status-dot"></span>
-                <span id="connection-status">Connecting...</span>
+            <div class="header-actions">
+                <div class="status-indicator" id="status-indicator">
+                    <span class="status-dot"></span>
+                    <span id="connection-status">Connecting...</span>
+                </div>
+                <button id="shutdown-btn" class="btn btn-danger shutdown-btn">
+                    <span class="shutdown-icon">⏻</span> Shutdown
+                </button>
             </div>
         </header>
 
@@ -119,6 +137,33 @@
                 </div>
                 <div id="consensus-logs" class="logs-container">
                     <p>No logs yet...</p>
+                </div>
+            </section>
+
+            <!-- Downloads Panel -->
+            <section class="panel downloads-panel">
+                <h2>📥 Downloads</h2>
+                <p class="panel-description">Monitor active and completed model downloads</p>
+                
+                <!-- Active Downloads -->
+                <div class="downloads-section">
+                    <h3>Active Downloads</h3>
+                    <div id="active-downloads" class="downloads-list">
+                        <p class="no-downloads">No active downloads</p>
+                    </div>
+                </div>
+                
+                <!-- Completed Downloads -->
+                <div class="downloads-section">
+                    <h3>Completed Downloads</h3>
+                    <div id="completed-downloads" class="downloads-list completed">
+                        <p class="no-downloads">No completed downloads yet</p>
+                    </div>
+                </div>
+                
+                <div class="downloads-actions">
+                    <button id="refresh-downloads-btn" class="btn btn-secondary">Refresh Downloads</button>
+                    <button id="clear-completed-btn" class="btn btn-secondary">Clear Completed</button>
                 </div>
             </section>
 

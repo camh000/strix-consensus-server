@@ -16,6 +16,7 @@ function initDashboard() {
     loadLogs();
     loadAvailableModels();
     loadModelConfiguration();
+    startDownloadsRefresh();
 }
 
 function setupEventListeners() {
@@ -57,6 +58,13 @@ function setupEventListeners() {
     // Model configuration
     document.getElementById('save-model-config-btn')?.addEventListener('click', saveModelConfiguration);
     document.getElementById('reload-models-btn')?.addEventListener('click', reloadModels);
+    
+    // Shutdown handlers
+    setupShutdownHandlers();
+    
+    // Downloads handlers
+    document.getElementById('refresh-downloads-btn')?.addEventListener('click', loadDownloads);
+    document.getElementById('clear-completed-btn')?.addEventListener('click', clearCompletedDownloads);
 }
 
 function startAutoRefresh() {
@@ -535,6 +543,197 @@ function setupFileUpload() {
         } catch (error) {
             showNotification(`Error uploading ${file.name}: ${error.message}`, 'error');
         }
+    }
+}
+
+// Shutdown Functions
+function setupShutdownHandlers() {
+    const shutdownBtn = document.getElementById('shutdown-btn');
+    const shutdownDialog = document.getElementById('shutdown-dialog');
+    const confirmBtn = document.getElementById('confirm-shutdown-btn');
+    const cancelBtn = document.getElementById('cancel-shutdown-btn');
+    
+    if (shutdownBtn) {
+        shutdownBtn.addEventListener('click', () => {
+            shutdownDialog.classList.add('active');
+        });
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            shutdownDialog.classList.remove('active');
+        });
+    }
+    
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', async () => {
+            shutdownDialog.classList.remove('active');
+            await performShutdown();
+        });
+    }
+    
+    // Close modal when clicking outside
+    if (shutdownDialog) {
+        shutdownDialog.addEventListener('click', (e) => {
+            if (e.target === shutdownDialog) {
+                shutdownDialog.classList.remove('active');
+            }
+        });
+    }
+}
+
+async function performShutdown() {
+    showNotification('Shutting down services...', 'info');
+    
+    try {
+        const response = await fetch('/api/shutdown', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('Services shutting down...', 'success');
+            // Show shutdown message
+            document.body.innerHTML = `
+                <div style="display: flex; justify-content: center; align-items: center; height: 100vh; background: #0f172a; color: #f1f5f9; text-align: center;">
+                    <div>
+                        <h1>⏻ System Shutdown</h1>
+                        <p>All services have been stopped.</p>
+                        <p style="color: #94a3b8; margin-top: 20px;">${result.message}</p>
+                    </div>
+                </div>
+            `;
+        } else {
+            showNotification('Shutdown failed: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showNotification('Error during shutdown: ' + error.message, 'error');
+    }
+}
+
+// Downloads Functions
+let downloadsRefreshInterval = null;
+
+function startDownloadsRefresh() {
+    // Refresh downloads every 3 seconds
+    loadDownloads();
+    downloadsRefreshInterval = setInterval(loadDownloads, 3000);
+}
+
+function stopDownloadsRefresh() {
+    if (downloadsRefreshInterval) {
+        clearInterval(downloadsRefreshInterval);
+        downloadsRefreshInterval = null;
+    }
+}
+
+async function loadDownloads() {
+    try {
+        const response = await fetch('/api/downloads');
+        const data = await response.json();
+        renderDownloads(data);
+    } catch (error) {
+        console.error('Failed to load downloads:', error);
+    }
+}
+
+function renderDownloads(data) {
+    const activeContainer = document.getElementById('active-downloads');
+    const completedContainer = document.getElementById('completed-downloads');
+    
+    if (!activeContainer || !completedContainer) return;
+    
+    const active = data.active || [];
+    const completed = data.completed || [];
+    
+    // Render active downloads
+    if (active.length === 0) {
+        activeContainer.innerHTML = '<p class="no-downloads">No active downloads</p>';
+    } else {
+        activeContainer.innerHTML = active.map(download => `
+            <div class="download-item downloading" data-download-id="${download.id}">
+                <div class="download-info">
+                    <h4>${download.name}</h4>
+                    <div class="download-status">
+                        <span class="status-badge downloading">Downloading</span>
+                        <span>${download.speed || ''}</span>
+                    </div>
+                </div>
+                <div class="download-details">
+                    <span>${formatBytes(download.downloaded)} / ${formatBytes(download.total)}</span>
+                    <span>ETA: ${download.eta || 'Calculating...'}</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" style="width: ${download.progress}%"></div>
+                </div>
+                <div class="download-percentage">${download.progress.toFixed(1)}%</div>
+            </div>
+        `).join('');
+    }
+    
+    // Render completed downloads
+    if (completed.length === 0) {
+        completedContainer.innerHTML = '<p class="no-downloads">No completed downloads yet</p>';
+    } else {
+        completedContainer.innerHTML = completed.map(download => `
+            <div class="download-item completed" data-download-id="${download.id}">
+                <div class="download-info">
+                    <h4>${download.name}</h4>
+                    <div class="download-status">
+                        <span class="status-badge completed">Complete</span>
+                    </div>
+                </div>
+                <div class="download-details">
+                    <span>${formatBytes(download.total)}</span>
+                    <span>Completed: ${new Date(download.completed_at).toLocaleString()}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    // Update available models dropdown if new models were downloaded
+    if (completed.length > 0 && window.availableModels) {
+        updateAvailableModelsWithDownloads(completed);
+    }
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function updateAvailableModelsWithDownloads(completedDownloads) {
+    // Add completed downloads to available models if not already present
+    completedDownloads.forEach(download => {
+        const exists = window.availableModels.some(m => m.id === download.model_id);
+        if (!exists) {
+            window.availableModels.push({
+                id: download.model_id,
+                name: download.name,
+                size: formatBytes(download.total),
+                description: 'Downloaded model'
+            });
+        }
+    });
+}
+
+async function clearCompletedDownloads() {
+    try {
+        const response = await fetch('/api/downloads/clear', {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            loadDownloads();
+            showNotification('Completed downloads cleared', 'success');
+        }
+    } catch (error) {
+        showNotification('Error clearing downloads: ' + error.message, 'error');
     }
 }
 
