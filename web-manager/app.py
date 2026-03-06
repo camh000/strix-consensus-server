@@ -298,6 +298,8 @@ def download_model():
     }
     
     downloads_store['active'].append(download_entry)
+    print(f"[DOWNLOAD] Added download to store: {download_entry['id']} - {model_id}")
+    print(f"[DOWNLOAD] Current active downloads: {len(downloads_store['active'])}")
     
     # Start download in background thread
     def download_worker():
