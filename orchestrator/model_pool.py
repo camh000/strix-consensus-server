@@ -100,14 +100,11 @@ class ModelPool:
         await self.start_all_servers()
 
     async def start_all_servers(self):
-        """Start all llama-server instances"""
-        # Start workers
-        for worker_id in self.workers:
-            await self.start_worker(worker_id)
-
-        # Start judge
+        """Start all llama-server instances in parallel"""
+        tasks = [self.start_worker(wid) for wid in self.workers]
         if self.judge:
-            await self.start_judge()
+            tasks.append(self.start_judge())
+        await asyncio.gather(*tasks)
 
     async def start_worker(self, worker_id: str):
         """Start a specific worker"""
@@ -135,7 +132,7 @@ class ModelPool:
             worker["status"] = "starting"
 
             # Wait for server to be ready
-            await self._wait_for_server(worker["port"])
+            await self._wait_for_server(worker["port"], process=worker["process"])
             worker["status"] = "running"
 
             logger.info(f"Worker {worker_id} started successfully")
@@ -160,7 +157,7 @@ class ModelPool:
             self.judge["process"] = process
             self.judge["status"] = "starting"
 
-            await self._wait_for_server(self.judge["port"])
+            await self._wait_for_server(self.judge["port"], process=self.judge["process"])
             self.judge["status"] = "running"
 
             logger.info("Judge started successfully")
@@ -280,18 +277,31 @@ class ModelPool:
             f"Invalid model format: {model_path_or_repo}. Expected 'local/modelname' or 'org/repo'"
         )
 
-    async def _wait_for_server(self, port: int, timeout: int = 60):
+    async def _wait_for_server(self, port: int, timeout: int = 60, process=None):
         """Wait for llama-server to be ready"""
         start_time = time.time()
         url = f"http://localhost:{port}/health"
 
         while time.time() - start_time < timeout:
+            # Fail fast: if the subprocess has already exited, don't wait for the full timeout
+            if process is not None and process.poll() is not None:
+                stderr_out = ""
+                try:
+                    stderr_out = process.stderr.read()
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"llama-server exited with code {process.poll()}. stderr: {stderr_out}"
+                )
+
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(url, timeout=2) as response:
+                    async with session.get(
+                        url, timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
                         if response.status == 200:
                             return
-            except:
+            except Exception:
                 pass
 
             await asyncio.sleep(1)
