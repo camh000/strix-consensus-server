@@ -188,7 +188,7 @@ class ModelPool:
             "-ngl",
             n_gpu_layers,
             "-np",
-            "4",  # Parallel sequences
+            os.getenv("N_PARALLEL", "1"),  # Default 1; parallelism comes from worker count
         ]
 
         # GPU-specific flags (hip uses the same -ngl flag already set above)
@@ -277,7 +277,7 @@ class ModelPool:
             f"Invalid model format: {model_path_or_repo}. Expected 'local/modelname' or 'org/repo'"
         )
 
-    async def _wait_for_server(self, port: int, timeout: int = 60, process=None):
+    async def _wait_for_server(self, port: int, timeout: int = 120, process=None):
         """Wait for llama-server to be ready"""
         start_time = time.time()
         url = f"http://localhost:{port}/health"

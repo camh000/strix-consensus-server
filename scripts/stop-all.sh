@@ -19,6 +19,14 @@ if [ -f /tmp/strix-orchestrator.pid ]; then
     rm /tmp/strix-orchestrator.pid
 fi
 
+# Kill any orphaned llama-server worker processes
+echo "Stopping llama-server workers..."
+pkill -f llama-server 2>/dev/null || true
+
+# Give processes a moment to exit, then force-kill any survivors
+sleep 2
+pkill -9 -f llama-server 2>/dev/null || true
+
 # Stop nginx
 echo "Stopping nginx..."
 if command -v systemctl &> /dev/null && pidof systemd > /dev/null 2>&1; then
