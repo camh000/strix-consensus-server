@@ -167,56 +167,71 @@ class ModelPool:
 
         return process
 
-    async def _ensure_model(self, model_repo: str) -> str:
-        """Download model if not present"""
-        # Parse repo name
-        parts = model_repo.split("/")
-        if len(parts) != 2:
-            raise ValueError(f"Invalid model repo format: {model_repo}")
+    async def _ensure_model(self, model_path_or_repo: str) -> str:
+        """Ensure model exists - handles both local paths and HuggingFace repos"""
 
-        org, repo = parts
-        quant = os.getenv("QUANTIZATION", "Q4_K_M")
+        # Check if it's a local model path (starts with local/)
+        if model_path_or_repo.startswith("local/"):
+            model_name = model_path_or_repo[6:]  # Remove "local/" prefix
+            model_path = os.path.join(self.models_dir, f"{model_name}.gguf")
 
-        # Expected filename
-        filename = f"{repo.split('-')[0]}-{quant}.gguf"
-        model_path = os.path.join(self.models_dir, filename)
+            if os.path.exists(model_path):
+                logger.info(f"Using local model: {model_path}")
+                return model_path
+            else:
+                raise FileNotFoundError(f"Local model not found: {model_path}")
 
-        if os.path.exists(model_path):
-            logger.info(f"Model already exists: {model_path}")
+        # Legacy HuggingFace repo format (for backwards compatibility)
+        parts = model_path_or_repo.split("/")
+        if len(parts) == 2:
+            org, repo = parts
+            quant = os.getenv("QUANTIZATION", "Q4_K_M")
+
+            # Expected filename
+            filename = f"{repo.split('-')[0]}-{quant}.gguf"
+            model_path = os.path.join(self.models_dir, filename)
+
+            if os.path.exists(model_path):
+                logger.info(f"Model already exists: {model_path}")
+                return model_path
+
+            # Download model
+            logger.info(f"Downloading model: {model_path_or_repo}")
+            os.makedirs(self.models_dir, exist_ok=True)
+
+            import urllib.request
+
+            url = f"https://huggingface.co/{model_path_or_repo}/resolve/main/{filename}"
+
+            try:
+                logger.info(f"Downloading from: {url}")
+                urllib.request.urlretrieve(url, model_path)
+                logger.info(f"Downloaded: {model_path}")
+            except Exception as e:
+                logger.error(f"Failed to download model: {e}")
+                # Try alternative quantization
+                for alt_quant in ["Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0"]:
+                    if alt_quant != quant:
+                        alt_filename = f"{repo.split('-')[0]}-{alt_quant}.gguf"
+                        alt_url = f"https://huggingface.co/{model_path_or_repo}/resolve/main/{alt_filename}"
+                        try:
+                            logger.info(f"Trying alternative: {alt_url}")
+                            urllib.request.urlretrieve(alt_url, model_path)
+                            logger.info(f"Downloaded alternative: {model_path}")
+                            break
+                        except:
+                            continue
+
+            if not os.path.exists(model_path):
+                raise FileNotFoundError(
+                    f"Could not download model: {model_path_or_repo}"
+                )
+
             return model_path
 
-        # Download model
-        logger.info(f"Downloading model: {model_repo}")
-        os.makedirs(self.models_dir, exist_ok=True)
-
-        # Use huggingface-cli or wget
-        import urllib.request
-
-        url = f"https://huggingface.co/{model_repo}/resolve/main/{filename}"
-
-        try:
-            logger.info(f"Downloading from: {url}")
-            urllib.request.urlretrieve(url, model_path)
-            logger.info(f"Downloaded: {model_path}")
-        except Exception as e:
-            logger.error(f"Failed to download model: {e}")
-            # Try alternative quantization
-            for alt_quant in ["Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0"]:
-                if alt_quant != quant:
-                    alt_filename = f"{repo.split('-')[0]}-{alt_quant}.gguf"
-                    alt_url = f"https://huggingface.co/{model_repo}/resolve/main/{alt_filename}"
-                    try:
-                        logger.info(f"Trying alternative: {alt_url}")
-                        urllib.request.urlretrieve(alt_url, model_path)
-                        logger.info(f"Downloaded alternative: {model_path}")
-                        break
-                    except:
-                        continue
-
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Could not download model: {model_repo}")
-
-        return model_path
+        raise ValueError(
+            f"Invalid model format: {model_path_or_repo}. Expected 'local/modelname' or 'org/repo'"
+        )
 
     async def _wait_for_server(self, port: int, timeout: int = 60):
         """Wait for llama-server to be ready"""

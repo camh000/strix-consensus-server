@@ -418,16 +418,30 @@ function renderLogs(logs) {
 function renderAvailableModels(models) {
     const container = document.getElementById('available-models');
     
-    container.innerHTML = models.map(model => `
+    if (!models || models.length === 0) {
+        container.innerHTML = `
+            <div class="no-models-message" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                <p>No models found in ./models/ directory</p>
+                <p style="margin-top: 10px; font-size: 0.9rem;">Upload .gguf files using the Upload tab</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = models.map(model => {
+        const isLocal = model.id.startsWith('local/');
+        const badge = isLocal ? '<span class="local-badge">📁 Local</span>' : '';
+        
+        return `
         <div class="model-card">
-            <h4>${model.name}</h4>
+            <div class="model-header">
+                <h4>${model.name}</h4>
+                ${badge}
+            </div>
             <div class="size">${model.size}</div>
             <p class="description">${model.description}</p>
-            <button class="btn btn-primary" onclick="downloadModel('${model.id}')">
-                Download
-            </button>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // Event Handlers
