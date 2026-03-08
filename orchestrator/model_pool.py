@@ -343,8 +343,12 @@ class ModelPool:
         if tools:
             payload["tools"] = tools
 
+        inference_timeout = aiohttp.ClientTimeout(
+            connect=5,
+            sock_read=int(os.getenv("CONSENSUS_TIMEOUT", 120)),
+        )
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
+            async with session.post(url, json=payload, timeout=inference_timeout) as response:
                 if response.status != 200:
                     text = await response.text()
                     raise RuntimeError(f"Worker {worker_id} error: {text}")

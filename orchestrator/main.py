@@ -137,8 +137,10 @@ async def chat_completion(request: ChatRequest):
             return await handle_single_mode(request, config)
         else:
             return await handle_consensus_mode(request, config)
+    except HTTPException:
+        raise  # Let FastAPI handle these directly; don't swallow status/detail
     except Exception as e:
-        logger.error(f"Error processing request: {e}")
+        logger.error(f"Error processing request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
