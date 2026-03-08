@@ -24,37 +24,77 @@ class ModelPool:
         self.models_dir = os.getenv("MODELS_DIR", "./models")
 
     async def initialize(self):
-        """Initialize model pool from environment configuration"""
+        """Initialize model pool from config file"""
         logger.info("Initializing model pool...")
 
-        # Load worker configurations from env
-        worker_count = int(os.getenv("WORKER_COUNT", 3))
+        # Load worker configurations from config file
+        import json
 
-        for i in range(1, worker_count + 1):
-            model_env = os.getenv(f"WORKER_{i}_MODEL")
-            if model_env:
-                worker_id = f"worker-{i}"
-                port = self.base_port + i - 1
+        config_file = "config/runtime_config.json"
 
-                self.workers[worker_id] = {
-                    "id": worker_id,
-                    "model_repo": model_env,
-                    "port": port,
+        try:
+            with open(config_file, "r") as f:
+                config = json.load(f)
+
+            # Load workers from config
+            for worker_config in config.get("workers", []):
+                worker_id = worker_config["id"]
+                if worker_config.get("enabled", True):
+                    self.workers[worker_id] = {
+                        "id": worker_id,
+                        "model_repo": worker_config["model"],
+                        "port": worker_config["port"],
+                        "status": "stopped",
+                        "process": None,
+                        "last_used": None,
+                    }
+                    logger.info(
+                        f"Loaded worker {worker_id} with model {worker_config['model']}"
+                    )
+
+            # Load judge from config
+            judge_config = config.get("judge", {})
+            if judge_config.get("enabled", True) and judge_config.get("model"):
+                self.judge = {
+                    "id": "judge",
+                    "model_repo": judge_config["model"],
+                    "port": judge_config.get("port", self.judge_port),
                     "status": "stopped",
                     "process": None,
-                    "last_used": None,
                 }
+                logger.info(f"Loaded judge with model {judge_config['model']}")
 
-        # Initialize judge
-        judge_model = os.getenv("JUDGE_MODEL")
-        if judge_model:
-            self.judge = {
-                "id": "judge",
-                "model_repo": judge_model,
-                "port": self.judge_port,
-                "status": "stopped",
-                "process": None,
-            }
+        except Exception as e:
+            logger.error(f"Error loading config file: {e}")
+            logger.warning("Falling back to environment variables")
+
+            # Fallback to environment variables
+            worker_count = int(os.getenv("WORKER_COUNT", 3))
+            for i in range(1, worker_count + 1):
+                model_env = os.getenv(f"WORKER_{i}_MODEL")
+                if model_env:
+                    worker_id = f"worker-{i}"
+                    port = self.base_port + i - 1
+
+                    self.workers[worker_id] = {
+                        "id": worker_id,
+                        "model_repo": model_env,
+                        "port": port,
+                        "status": "stopped",
+                        "process": None,
+                        "last_used": None,
+                    }
+
+            # Initialize judge from env
+            judge_model = os.getenv("JUDGE_MODEL")
+            if judge_model:
+                self.judge = {
+                    "id": "judge",
+                    "model_repo": judge_model,
+                    "port": self.judge_port,
+                    "status": "stopped",
+                    "process": None,
+                }
 
         # Start all model servers
         await self.start_all_servers()
