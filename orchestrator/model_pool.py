@@ -195,7 +195,7 @@ class ModelPool:
 
         # Add flash attention if enabled
         if os.getenv("FLASH_ATTENTION", "true").lower() == "true":
-            cmd.append("-fa")
+            cmd.extend(["--flash-attn", "on"])
 
         # Add memory mapping
         if os.getenv("MMAP", "true").lower() == "true":
