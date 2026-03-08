@@ -1,6 +1,9 @@
 # Main orchestrator service for Strix Consensus Server
 # Handles mode switching, request routing, and tool execution
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel

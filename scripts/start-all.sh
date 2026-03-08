@@ -23,7 +23,22 @@ fi
 # Start orchestrator
 echo "Starting orchestrator..."
 cd "$PROJECT_DIR"
+
+# Verify venv exists
+if [ ! -f "venv/bin/activate" ]; then
+    echo "ERROR: Virtual environment not found at $PROJECT_DIR/venv/"
+    echo "Run the following to set it up:"
+    echo "  python3 -m venv venv"
+    echo "  source venv/bin/activate"
+    echo "  pip install -r orchestrator/requirements.txt"
+    echo "  pip install -r web-manager/requirements.txt"
+    exit 1
+fi
+
 source venv/bin/activate
+
+# Ensure logs directory exists
+mkdir -p logs
 
 # Kill any existing orchestrator processes
 pkill -f "orchestrator.main" 2>/dev/null || true

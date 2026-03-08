@@ -122,22 +122,26 @@ class ModelPool:
 
         logger.info(f"Starting worker {worker_id} on port {worker['port']}...")
 
-        # Download model if needed
-        model_path = await self._ensure_model(worker["model_repo"])
+        try:
+            # Download model if needed
+            model_path = await self._ensure_model(worker["model_repo"])
 
-        # Start llama-server
-        process = self._start_llama_server(
-            model_path=model_path, port=worker["port"], name=worker_id
-        )
+            # Start llama-server
+            process = self._start_llama_server(
+                model_path=model_path, port=worker["port"], name=worker_id
+            )
 
-        worker["process"] = process
-        worker["status"] = "starting"
+            worker["process"] = process
+            worker["status"] = "starting"
 
-        # Wait for server to be ready
-        await self._wait_for_server(worker["port"])
-        worker["status"] = "running"
+            # Wait for server to be ready
+            await self._wait_for_server(worker["port"])
+            worker["status"] = "running"
 
-        logger.info(f"Worker {worker_id} started successfully")
+            logger.info(f"Worker {worker_id} started successfully")
+        except Exception as e:
+            worker["status"] = "error"
+            logger.error(f"Worker {worker_id} failed to start: {e}")
 
     async def start_judge(self):
         """Start judge model server"""
@@ -146,19 +150,23 @@ class ModelPool:
 
         logger.info(f"Starting judge on port {self.judge['port']}...")
 
-        model_path = await self._ensure_model(self.judge["model_repo"])
+        try:
+            model_path = await self._ensure_model(self.judge["model_repo"])
 
-        process = self._start_llama_server(
-            model_path=model_path, port=self.judge["port"], name="judge"
-        )
+            process = self._start_llama_server(
+                model_path=model_path, port=self.judge["port"], name="judge"
+            )
 
-        self.judge["process"] = process
-        self.judge["status"] = "starting"
+            self.judge["process"] = process
+            self.judge["status"] = "starting"
 
-        await self._wait_for_server(self.judge["port"])
-        self.judge["status"] = "running"
+            await self._wait_for_server(self.judge["port"])
+            self.judge["status"] = "running"
 
-        logger.info("Judge started successfully")
+            logger.info("Judge started successfully")
+        except Exception as e:
+            self.judge["status"] = "error"
+            logger.error(f"Judge failed to start: {e}")
 
     def _start_llama_server(
         self, model_path: str, port: int, name: str
@@ -186,9 +194,7 @@ class ModelPool:
             "4",  # Parallel sequences
         ]
 
-        # Add GPU-specific flags
-        if gpu_backend == "hip":
-            cmd.extend(["-ngl", n_gpu_layers])
+        # GPU-specific flags (hip uses the same -ngl flag already set above)
 
         # Add flash attention if enabled
         if os.getenv("FLASH_ATTENTION", "true").lower() == "true":
@@ -227,8 +233,9 @@ class ModelPool:
             org, repo = parts
             quant = os.getenv("QUANTIZATION", "Q4_K_M")
 
-            # Expected filename
-            filename = f"{repo.split('-')[0]}-{quant}.gguf"
+            # Expected filename (strip -GGUF suffix, then append quantization)
+            repo_base = repo.removesuffix("-GGUF").removesuffix("-gguf")
+            filename = f"{repo_base}-{quant}.gguf"
             model_path = os.path.join(self.models_dir, filename)
 
             if os.path.exists(model_path):
@@ -252,7 +259,7 @@ class ModelPool:
                 # Try alternative quantization
                 for alt_quant in ["Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0"]:
                     if alt_quant != quant:
-                        alt_filename = f"{repo.split('-')[0]}-{alt_quant}.gguf"
+                        alt_filename = f"{repo_base}-{alt_quant}.gguf"
                         alt_url = f"https://huggingface.co/{model_path_or_repo}/resolve/main/{alt_filename}"
                         try:
                             logger.info(f"Trying alternative: {alt_url}")
